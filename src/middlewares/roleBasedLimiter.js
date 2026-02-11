@@ -1,4 +1,5 @@
 const rateLimit = require('express-rate-limit');
+const { ipKeyGenerator } = rateLimit;
 
 const createRoleLimiter = (role, maxRequests) => {
   return rateLimit({
@@ -6,7 +7,7 @@ const createRoleLimiter = (role, maxRequests) => {
     max: maxRequests,
     keyGenerator: (req) => {
       // Asume que el usuario está en req.user después de autenticación
-      return req.user ? `${req.user.id}:${req.user.role}` : req.ip;
+      return req.user ? `${req.user.id}:${req.user.role}` : ipKeyGenerator(req.ip || '');
     },
     skip: (req) => {
       // Solo aplicar si el usuario tiene el rol correcto

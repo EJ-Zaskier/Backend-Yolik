@@ -4,7 +4,8 @@
   "description": "Proyecto web e-commerce de ropa tradicional",
   "main": "index.js",
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "test": "node --test --test-concurrency=1 tests/**/*.test.js",
+    "test:orders": "node --test --test-concurrency=1 tests/order-concurrency.test.js"
   },
   "repository": {
     "type": "git",
@@ -27,6 +28,7 @@
     "mongoose": "^9.1.6"
   },
   "devDependencies": {
+    "mongodb-memory-server": "^11.0.1",
     "nodemon": "^3.1.11"
   }
 }
