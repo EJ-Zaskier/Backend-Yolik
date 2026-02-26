@@ -3,6 +3,7 @@ const cors = require('cors');
 const rateLimit = require('express-rate-limit');
 
 const app = express();
+const paymentsEnabled = process.env.ENABLE_PAYMENTS === 'true';
 
 app.disable('x-powered-by');
 app.set('trust proxy', process.env.TRUST_PROXY === 'true' ? 1 : 0);
@@ -25,7 +26,7 @@ const corsOptions = {
     return callback(new Error('Origen no permitido por CORS'));
   },
   methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
-  allowedHeaders: ['Authorization', 'Content-Type'],
+  allowedHeaders: ['Authorization', 'Content-Type', 'Idempotency-Key', 'X-Idempotency-Key'],
   credentials: true,
   optionsSuccessStatus: 204
 };
@@ -50,21 +51,6 @@ const generalLimiter = rateLimit({
   max: 100,
   message: {
     error: "Demasiadas peticiones. Inténtalo de nuevo en 15 minutos"
-  },
-  standardHeaders: true,
-  legacyHeaders: false,
-  skip: (req) => {
-    // NO aplicar a rutas que ya tienen su propio limitador
-    return req.path.startsWith('/api/auth/login');
-  }
-});
-
-//LIMITADOR PARA ENDPOINTS PÚBLICOS (más restrictivo)
-const publicLimiter = rateLimit({
-  windowMs: 15 * 60 * 1000,
-  max: 50, // Más bajo que el general
-  message: {
-    error: "Límite de peticiones alcanzado. Inténtalo más tarde"
   },
   standardHeaders: true,
   legacyHeaders: false
@@ -92,6 +78,16 @@ const dashboardLimiter = rateLimit({
   legacyHeaders: false
 });
 
+const paymentLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 60,
+  message: {
+    error: "Límite de peticiones de pago alcanzado. Espera 15 minutos"
+  },
+  standardHeaders: true,
+  legacyHeaders: false
+});
+
 // limitador general por defecto
 app.use(generalLimiter);
 
@@ -108,8 +104,9 @@ app.use('/api/orders', require('./routes/order.routes')); // Usa generalLimiter
 // Dashboard: limitador específico para operaciones pesadas
 app.use('/api/dashboard', dashboardLimiter, require('./routes/dashboard.routes'));
 
-// Rutas PÚBLICAS (si pro si se implementa ej: landing page, contacto)
-// app.use('/api/public', publicLimiter, require('./routes/public.routes'));
+if (paymentsEnabled) {
+  app.use('/api/payments', paymentLimiter, require('./routes/payment.routes'));
+}
 
 app.use(require('./middlewares/error.middleware'));
 

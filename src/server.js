@@ -2,7 +2,7 @@ require('dotenv').config();
 const app = require('./app');
 const connectDB = require('./config/database');
 
-const requiredEnvVars = ['MONGO_URI', 'JWT_SECRET', 'REFRESH_TOKEN_SECRET', 'PORT'];
+const requiredEnvVars = ['MONGO_URI', 'AUTH0_DOMAIN', 'AUTH0_API_AUDIENCE', 'PORT'];
 
 const validateEnvironment = () => {
   const missing = requiredEnvVars.filter((key) => !process.env[key]);
@@ -10,26 +10,20 @@ const validateEnvironment = () => {
     throw new Error(`Variables de entorno faltantes: ${missing.join(', ')}`);
   }
 
-  const jwtSecret = process.env.JWT_SECRET || '';
-  const refreshSecret = process.env.REFRESH_TOKEN_SECRET || '';
+  const auth0Domain = String(process.env.AUTH0_DOMAIN || '').trim();
+  const auth0Audience = String(process.env.AUTH0_API_AUDIENCE || '').trim();
+
+  if (!auth0Domain.includes('.auth0.com')) {
+    throw new Error('AUTH0_DOMAIN inválido');
+  }
+
+  if (auth0Audience.length < 8) {
+    throw new Error('AUTH0_API_AUDIENCE inválido');
+  }
 
   if (process.env.NODE_ENV === 'production') {
     if (!process.env.FRONTEND_URL) {
       throw new Error('FRONTEND_URL es obligatorio en producción');
-    }
-
-    if (jwtSecret.length < 32 || refreshSecret.length < 32) {
-      throw new Error('JWT_SECRET y REFRESH_TOKEN_SECRET deben tener al menos 32 caracteres en producción');
-    }
-
-    const hasDefaultSecrets =
-      jwtSecret.includes('cambiar_en_produccion') ||
-      jwtSecret.includes('super_secret') ||
-      refreshSecret.includes('cambiar_en_produccion') ||
-      refreshSecret.includes('otro_secret');
-
-    if (hasDefaultSecrets) {
-      throw new Error('No uses secrets por defecto en producción');
     }
   }
 };

@@ -4,7 +4,7 @@ const mongoose = require('mongoose');
 const { MongoMemoryReplSet } = require('mongodb-memory-server');
 
 const orderController = require('../src/controllers/order.controller');
-const User = require('../src/models/user.model');
+const User = require('../src/models/User.model');
 const Product = require('../src/models/Product.model');
 const Order = require('../src/models/Order.model');
 
@@ -57,7 +57,7 @@ const createTestProduct = async (overrides = {}) =>
   Product.create({
     name: 'Blusa Artesanal',
     description: 'Blusa bordada de algodón elaborada por artesanas de la región.',
-    region: 'Puebla',
+    region: 'Tehuacan',
     category: 'Blusas',
     price: 650,
     stock: 1,

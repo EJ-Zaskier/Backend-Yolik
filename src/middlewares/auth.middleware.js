@@ -1,62 +1,202 @@
-const jwt = require('jsonwebtoken');
-const { isTokenBlacklisted } = require('../utils/tokenBlacklist');
+const crypto = require('crypto');
+const { auth } = require('express-oauth2-jwt-bearer');
+const User = require('../models/User.model');
+
+const normalizeIssuer = () => {
+  const explicitIssuer = process.env.AUTH0_ISSUER_BASE_URL;
+  if (explicitIssuer) {
+    return explicitIssuer.endsWith('/') ? explicitIssuer : `${explicitIssuer}/`;
+  }
+
+  const domain = process.env.AUTH0_DOMAIN;
+  if (!domain) return null;
+
+  const cleanDomain = String(domain).trim().replace(/^https?:\/\//, '').replace(/\/$/, '');
+  if (!cleanDomain) return null;
+  return `https://${cleanDomain}/`;
+};
+
+const issuerBaseURL = normalizeIssuer();
+const audience = process.env.AUTH0_API_AUDIENCE || null;
+
+const tokenVerifier = issuerBaseURL && audience
+  ? auth({
+      issuerBaseURL,
+      audience,
+      tokenSigningAlg: 'RS256',
+      strict: true
+    })
+  : null;
+
+const getScopes = (payload) => {
+  if (!payload?.scope || typeof payload.scope !== 'string') return [];
+  return payload.scope
+    .split(' ')
+    .map((scope) => scope.trim())
+    .filter(Boolean);
+};
+
+const getRoles = (payload) => {
+  const rolesClaimNamespace = process.env.AUTH0_ROLES_CLAIM || 'https://yolik.app/roles';
+
+  if (Array.isArray(payload?.[rolesClaimNamespace])) {
+    return payload[rolesClaimNamespace].filter((role) => typeof role === 'string');
+  }
+
+  if (Array.isArray(payload?.roles)) {
+    return payload.roles.filter((role) => typeof role === 'string');
+  }
+
+  return [];
+};
+
+const getPermissions = (payload) => {
+  if (!Array.isArray(payload?.permissions)) return [];
+  return payload.permissions.filter((permission) => typeof permission === 'string');
+};
+
+const normalizeName = (payload) => {
+  const tokenName = payload?.name || payload?.nickname || payload?.given_name || 'Usuario';
+  return String(tokenName).trim().slice(0, 100) || 'Usuario';
+};
+
+const normalizeEmail = (payload) => {
+  if (!payload?.email || typeof payload.email !== 'string') return null;
+  return payload.email.trim().toLowerCase();
+};
+
+const buildFallbackEmail = (sub) => {
+  const digest = crypto.createHash('sha256').update(sub).digest('hex').slice(0, 24);
+  return `auth0-${digest}@noemail.local`;
+};
+
+const resolveRole = (roles, permissions) => {
+  if (roles.includes('admin')) return 'admin';
+  if (permissions.includes('read:dashboard') || permissions.includes('admin:all')) return 'admin';
+  return 'user';
+};
+
+const upsertUserFromAuth0 = async (payload) => {
+  const sub = String(payload.sub);
+  const email = normalizeEmail(payload);
+  const name = normalizeName(payload);
+  const roles = getRoles(payload);
+  const permissions = getPermissions(payload);
+  const scopedRole = resolveRole(roles, permissions);
+
+  let user = await User.findOne({ auth0Sub: sub });
+
+  if (!user) {
+    if (email) {
+      const identityConflict = await User.findOne({
+        email,
+        auth0Sub: { $ne: sub }
+      }).lean();
+
+      if (identityConflict) {
+        const conflictError = new Error(
+          'El correo ya existe en otra identidad. Requiere vinculación manual.'
+        );
+        conflictError.status = 409;
+        conflictError.code = 'AUTH_IDENTITY_CONFLICT';
+        throw conflictError;
+      }
+    }
+
+    user = await User.create({
+      authProvider: 'auth0',
+      auth0Sub: sub,
+      name,
+      email: email || buildFallbackEmail(sub),
+      emailVerified: Boolean(payload.email_verified),
+      role: scopedRole
+    });
+  } else {
+    const updates = {};
+
+    if (!user.auth0Sub) {
+      updates.auth0Sub = sub;
+    }
+
+    if (email && payload.email_verified === true && user.email !== email) {
+      updates.email = email;
+    }
+
+    if (name && user.name !== name) {
+      updates.name = name;
+    }
+
+    if (typeof payload.email_verified === 'boolean' && user.emailVerified !== payload.email_verified) {
+      updates.emailVerified = payload.email_verified;
+    }
+
+    const nextRole = resolveRole(roles, permissions);
+    if (user.role !== nextRole) {
+      updates.role = nextRole;
+    }
+
+    if (user.authProvider !== 'auth0') {
+      updates.authProvider = 'auth0';
+    }
+
+    if (Object.keys(updates).length > 0) {
+      user = await User.findByIdAndUpdate(user._id, { $set: updates }, { new: true });
+    }
+  }
+
+  if (!user.isActive) {
+    const error = new Error('Cuenta deshabilitada');
+    error.status = 403;
+    error.code = 'ACCOUNT_DISABLED';
+    throw error;
+  }
+
+  return {
+    user,
+    roles,
+    permissions,
+    scopes: getScopes(payload)
+  };
+};
 
 module.exports = (req, res, next) => {
-  try {
-    const authHeader = req.headers.authorization;
-    
-    if (!authHeader || !authHeader.startsWith('Bearer ')) {
-      return res.status(401).json({ 
-        message: 'No autorizado - Token no proporcionado',
-        code: 'NO_TOKEN' 
-      });
-    }
-
-    const token = authHeader.split(' ')[1];
-
-    if (isTokenBlacklisted(token)) {
-      return res.status(401).json({
-        message: 'Token revocado',
-        code: 'TOKEN_REVOKED'
-      });
-    }
-
-    const decoded = jwt.verify(token, process.env.JWT_SECRET);
-    
-    // Validar que los datos requeridos están presentes
-    if (!decoded.id || !decoded.role) {
-      return res.status(401).json({ message: 'Token inválido' });
-    }
-
-    if (decoded.typ && decoded.typ !== 'access') {
-      return res.status(401).json({
-        message: 'Tipo de token inválido',
-        code: 'INVALID_TOKEN_TYPE'
-      });
-    }
-
-    req.user = {
-      id: decoded.id,
-      email: decoded.email,
-      role: decoded.role
-    };
-    
-    next();
-  } catch (error) {
-    if (error.name === 'TokenExpiredError') {
-      return res.status(401).json({ 
-        message: 'Token expirado',
-        code: 'TOKEN_EXPIRED' 
-      });
-    }
-    
-    if (error.name === 'JsonWebTokenError') {
-      return res.status(401).json({ 
-        message: 'Token inválido',
-        code: 'INVALID_TOKEN' 
-      });
-    }
-
-    res.status(500).json({ message: 'Error en verificación de token' });
+  if (!tokenVerifier) {
+    return res.status(500).json({
+      message: 'Auth0 no está configurado correctamente',
+      code: 'AUTH0_MISCONFIGURATION'
+    });
   }
+
+  tokenVerifier(req, res, async (authError) => {
+    if (authError) {
+      return next(authError);
+    }
+
+    try {
+      const payload = req.auth?.payload || {};
+      if (!payload?.sub) {
+        return res.status(401).json({
+          message: 'Token inválido',
+          code: 'INVALID_TOKEN'
+        });
+      }
+
+      const { user, roles, permissions, scopes } = await upsertUserFromAuth0(payload);
+
+      req.user = {
+        id: String(user._id),
+        auth0Sub: String(payload.sub),
+        email: user.email,
+        name: user.name,
+        role: resolveRole(roles, permissions),
+        roles,
+        permissions,
+        scopes
+      };
+
+      return next();
+    } catch (error) {
+      return next(error);
+    }
+  });
 };

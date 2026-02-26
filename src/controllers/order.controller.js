@@ -179,7 +179,12 @@ exports.getOrderById = async (req, res, next) => {
     }
 
     const isOwner = String(order.userId) === String(req.user.id);
-    const isAdmin = req.user.role === 'admin';
+    const permissions = Array.isArray(req.user.permissions) ? req.user.permissions : [];
+    const scopes = Array.isArray(req.user.scopes) ? req.user.scopes : [];
+    const isAdmin =
+      req.user.role === 'admin' ||
+      permissions.includes('read:orders:all') ||
+      scopes.includes('read:orders:all');
 
     if (!isOwner && !isAdmin) {
       return res.status(403).json({

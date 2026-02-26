@@ -1,7 +1,30 @@
 const Product = require('../models/Product.model');
+const mongoose = require('mongoose');
+
+const ALLOWED_CATEGORIES = new Set(['Vestidos', 'Blusas', 'Accesorios', 'Otro']);
+const ALLOWED_REGIONS = new Set(['Tehuacan', 'otro']);
+
+const readQueryString = (value, maxLength = 100) => {
+  if (typeof value !== 'string') return null;
+  const trimmed = value.trim();
+  if (!trimmed) return null;
+  return trimmed.slice(0, maxLength);
+};
 
 exports.getProducts = async (req, res, next) => {
   try {
+    const queryKeys = Object.keys(req.query || {});
+    const hasOperatorLikeQueryKey = queryKeys.some(
+      (key) => key.includes('$') || key.includes('.') || key.includes('[') || key.includes(']')
+    );
+
+    if (hasOperatorLikeQueryKey) {
+      return res.status(400).json({
+        message: 'Parámetros de consulta inválidos',
+        code: 'INVALID_QUERY_PARAMS'
+      });
+    }
+
     const page = Math.max(Number.parseInt(req.query.page, 10) || 1, 1);
     const limit = Math.min(Math.max(Number.parseInt(req.query.limit, 10) || 20, 1), 100);
     const skip = (page - 1) * limit;
@@ -12,18 +35,37 @@ exports.getProducts = async (req, res, next) => {
     // const stockVisibilityFilter = {}; // Usa esta línea si quieres mostrar agotados y marcar "Sin existencias".
     Object.assign(filter, stockVisibilityFilter);
 
-    if (req.query.category) {
-      filter.category = req.query.category;
+    if (req.query.category !== undefined) {
+      const category = readQueryString(req.query.category, 50);
+      if (!category || !ALLOWED_CATEGORIES.has(category)) {
+        return res.status(400).json({
+          message: 'Categoría inválida',
+          code: 'INVALID_CATEGORY'
+        });
+      }
+      filter.category = category;
     }
 
-    if (req.query.region) {
-      filter.region = req.query.region;
+    if (req.query.region !== undefined) {
+      const region = readQueryString(req.query.region, 50);
+      if (!region || !ALLOWED_REGIONS.has(region)) {
+        return res.status(400).json({
+          message: 'Región inválida',
+          code: 'INVALID_REGION'
+        });
+      }
+      filter.region = region;
     }
 
-    if (req.query.search) {
-      const search = String(req.query.search).trim().slice(0, 100);
+    if (req.query.search !== undefined) {
+      const search = readQueryString(req.query.search, 100);
       if (search) {
         filter.$text = { $search: search };
+      } else {
+        return res.status(400).json({
+          message: 'Búsqueda inválida',
+          code: 'INVALID_SEARCH_QUERY'
+        });
       }
     }
 
@@ -51,6 +93,13 @@ exports.getProducts = async (req, res, next) => {
 
 exports.getProductById = async (req, res, next) => {
   try {
+    if (!mongoose.Types.ObjectId.isValid(req.params.id)) {
+      return res.status(400).json({
+        message: 'ID inválido',
+        code: 'INVALID_ID'
+      });
+    }
+
     const filter = { _id: req.params.id, active: true, stock: { $gt: 0 } };
     // const filter = { _id: req.params.id, active: true }; // Usa esta línea si quieres mostrar agotados con "Sin existencias".
 

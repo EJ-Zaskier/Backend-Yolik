@@ -43,6 +43,34 @@ const errorHandler = (err, req, res, next) => {
     });
   }
 
+  if (err.status === 401 && (err.code === 'invalid_token' || err.code === 'invalid_request')) {
+    return res.status(401).json({
+      message: 'Token de acceso inválido o ausente',
+      code: 'AUTH_UNAUTHORIZED'
+    });
+  }
+
+  if (err.status === 401 && err.code === 'insufficient_scope') {
+    return res.status(403).json({
+      message: 'Permisos insuficientes',
+      code: 'INSUFFICIENT_SCOPE'
+    });
+  }
+
+  if (err.status === 401) {
+    return res.status(401).json({
+      message: 'No autorizado',
+      code: 'AUTH_UNAUTHORIZED'
+    });
+  }
+
+  if (err.code === 'AUTH_IDENTITY_CONFLICT') {
+    return res.status(409).json({
+      message: 'Conflicto de identidad. Contacta a soporte para vincular tu cuenta.',
+      code: 'AUTH_IDENTITY_CONFLICT'
+    });
+  }
+
   // Errores de casting de MongoDB
   if (err.name === 'CastError') {
     return res.status(400).json({

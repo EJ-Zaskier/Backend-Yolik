@@ -1,99 +1,32 @@
-const validateEmail = (email) => {
-  const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-  return emailRegex.test(email);
-};
-
-const validatePassword = (password) => {
-  // Mínimo 8 caracteres, al menos una mayúscula, una minúscula y un número
-  const passwordRegex = /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[@$!%*?&])[A-Za-z\d@$!%*?&]{8,}$/;
-  return passwordRegex.test(password);
-};
-
 const sanitizeString = (str) => {
   if (typeof str !== 'string') return str;
-  return str.trim().replace(/[<>]/g, ''); // Prevenir inyeccione
+  return str.trim().replace(/[<>]/g, '');
 };
 
-// Middleware para validar registro
-const validateRegister = (req, res, next) => {
-  const { email, password, name } = req.body;
-
-  // Validar presencia de campos
-  if (!email || !password || !name) {
-    return res.status(400).json({ 
-      message: 'Faltan campos requeridos',
-      required: ['email', 'password', 'name']
-    });
-  }
-
-  // Validar email
-  if (!validateEmail(email)) {
-    return res.status(400).json({ 
-      message: 'Email inválido',
-      code: 'INVALID_EMAIL'
-    });
-  }
-
-  // Validar contraseña
-  if (!validatePassword(password)) {
-    return res.status(400).json({ 
-      message: 'Contraseña debe tener: 8+ caracteres, mayúscula, minúscula, número y símbolo',
-      code: 'WEAK_PASSWORD'
-    });
-  }
-
-  // Sanitizar
-  req.body.email = sanitizeString(email).toLowerCase();
-  req.body.name = sanitizeString(name);
-
-  next();
-};
-
-// Middleware para validar login
-const validateLogin = (req, res, next) => {
-  const { email, password } = req.body;
-
-  if (!email || !password) {
-    return res.status(400).json({ 
-      message: 'Email y contraseña son requeridos'
-    });
-  }
-
-  if (!validateEmail(email)) {
-    return res.status(400).json({ 
-      message: 'Email inválido'
-    });
-  }
-
-  req.body.email = sanitizeString(email).toLowerCase();
-  next();
-};
-
-// Middleware para validar producto
 const validateProduct = (req, res, next) => {
-  const { name, price, stock, category } = req.body;
+  const { name, price, stock } = req.body;
 
   if (!name || price === undefined || stock === undefined) {
-    return res.status(400).json({ 
+    return res.status(400).json({
       message: 'Faltan campos requeridos',
       required: ['name', 'price', 'stock']
     });
   }
 
   if (typeof price !== 'number' || price < 0) {
-    return res.status(400).json({ 
+    return res.status(400).json({
       message: 'Precio debe ser un número positivo'
     });
   }
 
   if (typeof stock !== 'number' || stock < 0) {
-    return res.status(400).json({ 
+    return res.status(400).json({
       message: 'Stock debe ser un número no negativo'
     });
   }
 
   req.body.name = sanitizeString(name);
-  next();
+  return next();
 };
 
 const validateOrder = (req, res, next) => {
@@ -152,30 +85,47 @@ const validateOrder = (req, res, next) => {
     };
   }
 
-  next();
+  return next();
 };
 
-const validateRefreshTokenRequest = (req, res, next) => {
-  const refreshToken = req.body?.refreshToken;
+const validatePaymentIntent = (req, res, next) => {
+  const { orderId, provider, currency } = req.body;
 
-  if (!refreshToken || typeof refreshToken !== 'string' || refreshToken.trim().length < 20) {
+  if (!orderId || typeof orderId !== 'string') {
     return res.status(400).json({
-      message: 'Refresh token requerido',
-      code: 'REFRESH_TOKEN_REQUIRED'
+      message: 'orderId es requerido',
+      code: 'ORDER_ID_REQUIRED'
     });
   }
 
-  req.body.refreshToken = refreshToken.trim();
-  next();
+  if (provider !== undefined && typeof provider !== 'string') {
+    return res.status(400).json({
+      message: 'provider inválido',
+      code: 'INVALID_PAYMENT_PROVIDER'
+    });
+  }
+
+  if (currency !== undefined && (typeof currency !== 'string' || currency.trim().length < 3)) {
+    return res.status(400).json({
+      message: 'currency inválida',
+      code: 'INVALID_CURRENCY'
+    });
+  }
+
+  req.body.orderId = orderId.trim();
+  if (typeof provider === 'string') {
+    req.body.provider = provider.trim().toLowerCase();
+  }
+  if (typeof currency === 'string') {
+    req.body.currency = currency.trim().toUpperCase();
+  }
+
+  return next();
 };
 
 module.exports = {
-  validateRegister,
-  validateLogin,
+  sanitizeString,
   validateProduct,
   validateOrder,
-  validateRefreshTokenRequest,
-  validateEmail,
-  validatePassword,
-  sanitizeString
+  validatePaymentIntent
 };

@@ -1,6 +1,18 @@
 const mongoose = require('mongoose');
 
 const UserSchema = new mongoose.Schema({
+  authProvider: {
+    type: String,
+    enum: ['auth0', 'local'],
+    default: 'auth0',
+    index: true
+  },
+  auth0Sub: {
+    type: String,
+    unique: true,
+    sparse: true,
+    index: true
+  },
   name: {
     type: String,
     required: [true, 'El nombre es requerido'],
@@ -17,7 +29,9 @@ const UserSchema = new mongoose.Schema({
   },
   passwordHash: {
     type: String,
-    required: [true, 'La contraseña es requerida'],
+    required: function requiredPasswordHash() {
+      return this.authProvider === 'local';
+    },
     minlength: 60, // Tamaño de hash bcrypt
     select: false
   },
@@ -65,6 +79,7 @@ UserSchema.set('toJSON', {
     delete ret.verificationToken;
     delete ret.loginAttempts;
     delete ret.lockUntil;
+    delete ret.auth0Sub;
     delete ret.__v;
     return ret;
   }
