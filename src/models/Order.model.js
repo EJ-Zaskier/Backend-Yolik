@@ -74,6 +74,8 @@ const OrderSchema = new mongoose.Schema({
 // Índices
 OrderSchema.index({ userId: 1, createdAt: -1 });
 OrderSchema.index({ status: 1 });
+OrderSchema.index({ createdAt: -1 });
+OrderSchema.index({ paymentStatus: 1, createdAt: -1 });
 
 // Middleware para validar items
 OrderSchema.pre('save', function() {

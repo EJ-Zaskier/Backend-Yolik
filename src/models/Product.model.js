@@ -17,13 +17,13 @@ const ProductSchema = new mongoose.Schema({
   region: {
     type: String,
     required: [true, 'La región es requerida'],
-    enum: ['Puebla', 'Tehuacan'],
+    enum: ['Tehuacan', 'otro'],
     trim: true
   },
   category: {
     type: String,
     required: [true, 'La categoría es requerida'],
-    enum: ['Vestidos', 'Blusas', 'Pantalones', 'Accesorios', 'Otro']
+    enum: ['Vestidos', 'Blusas', 'Accesorios', 'Otro']
   },
   price: {
     type: Number,

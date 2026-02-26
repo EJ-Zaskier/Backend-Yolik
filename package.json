@@ -5,7 +5,10 @@
   "main": "index.js",
   "scripts": {
     "test": "node --test --test-concurrency=1 tests/**/*.test.js",
-    "test:orders": "node --test --test-concurrency=1 tests/order-concurrency.test.js"
+    "test:orders": "node --test --test-concurrency=1 tests/order-concurrency.test.js",
+    "test:payments": "node --test --test-concurrency=1 tests/payment.controller.test.js",
+    "test:dashboard": "node --test --test-concurrency=1 tests/dashboard.controller.test.js",
+    "test:security": "node --test --test-concurrency=1 tests/security-products.test.js"
   },
   "repository": {
     "type": "git",
@@ -19,16 +22,19 @@
   },
   "homepage": "https://github.com/EJ-Zaskier/Backend-Yolik#readme",
   "dependencies": {
-    "bcrypt": "^6.0.0",
     "cors": "^2.8.6",
     "dotenv": "^17.2.4",
     "express": "^5.2.1",
+    "express-oauth2-jwt-bearer": "^1.7.1",
     "express-rate-limit": "^8.2.1",
-    "jsonwebtoken": "^9.0.3",
     "mongoose": "^9.1.6"
   },
   "devDependencies": {
     "mongodb-memory-server": "^11.0.1",
     "nodemon": "^3.1.11"
+  },
+  "overrides": {
+    "qs": "^6.15.0",
+    "minimatch": "^3.1.3"
   }
 }
