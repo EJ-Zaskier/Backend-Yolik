@@ -5,6 +5,19 @@ const Product = require('../models/Product.model');
 const buildOrderNumber = () =>
   `ORD-${Date.now()}-${Math.floor(Math.random() * 1000000)}`;
 
+const toMoneyCents = (value) => {
+  const parsed = Number(value);
+  if (!Number.isFinite(parsed) || parsed < 0) return null;
+  return Math.round(parsed * 100);
+};
+
+const fromMoneyCents = (value) => Number((value / 100).toFixed(2));
+
+const calculateDiscountPercent = (originalPriceCents, unitPriceCents) => {
+  if (originalPriceCents <= 0 || originalPriceCents <= unitPriceCents) return 0;
+  return Math.round(((originalPriceCents - unitPriceCents) / originalPriceCents) * 100);
+};
+
 const normalizeItems = (items) => {
   const consolidated = new Map();
 
@@ -56,17 +69,17 @@ exports.createOrder = async (req, res, next) => {
       });
     }
 
-    const safeTax = Number(tax);
-    const safeShippingCost = Number(shippingCost);
+    const safeTaxCents = toMoneyCents(tax);
+    const safeShippingCostCents = toMoneyCents(shippingCost);
 
-    if (!Number.isFinite(safeTax) || safeTax < 0) {
+    if (safeTaxCents === null) {
       return res.status(400).json({
         message: 'Impuesto inválido',
         code: 'INVALID_TAX'
       });
     }
 
-    if (!Number.isFinite(safeShippingCost) || safeShippingCost < 0) {
+    if (safeShippingCostCents === null) {
       return res.status(400).json({
         message: 'Costo de envío inválido',
         code: 'INVALID_SHIPPING_COST'
@@ -77,7 +90,7 @@ exports.createOrder = async (req, res, next) => {
 
     await session.withTransaction(async () => {
       const orderItems = [];
-      let subtotal = 0;
+      let subtotalCents = 0;
 
       for (const item of normalizedItems) {
         const updatedProduct = await Product.findOneAndUpdate(
@@ -91,25 +104,61 @@ exports.createOrder = async (req, res, next) => {
         );
 
         if (!updatedProduct) {
-          const error = new Error('stock insuficiente');
+          const existingProduct = await Product.findById(item.productId)
+            .select('active stock')
+            .session(session)
+            .lean();
+
+          const error =
+            !existingProduct || existingProduct.active !== true
+              ? new Error('Producto no disponible')
+              : new Error('stock insuficiente');
+
           error.status = 409;
-          error.code = 'INSUFFICIENT_STOCK';
+          error.code =
+            !existingProduct || existingProduct.active !== true
+              ? 'PRODUCT_NOT_AVAILABLE'
+              : 'INSUFFICIENT_STOCK';
           throw error;
         }
 
-        const itemSubtotal = Number((updatedProduct.price * item.quantity).toFixed(2));
-        subtotal += itemSubtotal;
+        const unitPriceCents = toMoneyCents(updatedProduct.price);
+        if (unitPriceCents === null) {
+          const error = new Error('Precio de producto inválido');
+          error.status = 409;
+          error.code = 'INVALID_PRODUCT_PRICE';
+          throw error;
+        }
+
+        const originalPriceRaw =
+          updatedProduct.originalPrice !== undefined && updatedProduct.originalPrice !== null
+            ? updatedProduct.originalPrice
+            : updatedProduct.price;
+
+        const originalPriceCentsCandidate = toMoneyCents(originalPriceRaw);
+        const originalPriceCents =
+          originalPriceCentsCandidate === null
+            ? unitPriceCents
+            : Math.max(originalPriceCentsCandidate, unitPriceCents);
+
+        const discountPerUnitCents = Math.max(0, originalPriceCents - unitPriceCents);
+        const itemSubtotalCents = unitPriceCents * item.quantity;
+        subtotalCents += itemSubtotalCents;
 
         orderItems.push({
           productId: updatedProduct._id,
           name: updatedProduct.name,
-          price: updatedProduct.price,
+          price: fromMoneyCents(unitPriceCents),
+          originalPrice: fromMoneyCents(originalPriceCents),
+          discountPerUnit: fromMoneyCents(discountPerUnitCents),
+          discountPercent: calculateDiscountPercent(originalPriceCents, unitPriceCents),
           quantity: item.quantity,
-          subtotal: itemSubtotal
+          subtotal: fromMoneyCents(itemSubtotalCents)
         });
       }
 
-      const total = Number((subtotal + safeTax + safeShippingCost).toFixed(2));
+      const totalCents = subtotalCents + safeTaxCents + safeShippingCostCents;
+      const total = fromMoneyCents(totalCents);
 
       const [order] = await Order.create(
         [
@@ -117,8 +166,8 @@ exports.createOrder = async (req, res, next) => {
             orderNumber: buildOrderNumber(),
             userId: req.user.id,
             items: orderItems,
-            tax: safeTax,
-            shippingCost: safeShippingCost,
+            tax: fromMoneyCents(safeTaxCents),
+            shippingCost: fromMoneyCents(safeShippingCostCents),
             total,
             shippingAddress,
             notes
@@ -139,6 +188,20 @@ exports.createOrder = async (req, res, next) => {
       return res.status(409).json({
         message: 'stock insuficiente',
         code: 'INSUFFICIENT_STOCK'
+      });
+    }
+
+    if (error.code === 'PRODUCT_NOT_AVAILABLE') {
+      return res.status(409).json({
+        message: 'Producto no disponible',
+        code: 'PRODUCT_NOT_AVAILABLE'
+      });
+    }
+
+    if (error.code === 'INVALID_PRODUCT_PRICE') {
+      return res.status(409).json({
+        message: 'Producto con precio inválido',
+        code: 'INVALID_PRODUCT_PRICE'
       });
     }
 

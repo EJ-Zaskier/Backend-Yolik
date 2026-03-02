@@ -3,6 +3,41 @@ const sanitizeString = (str) => {
   return str.trim().replace(/[<>]/g, '');
 };
 
+const hasDangerousKeys = (value) => {
+  if (!value || typeof value !== 'object') return false;
+
+  if (Array.isArray(value)) {
+    return value.some((entry) => hasDangerousKeys(entry));
+  }
+
+  return Object.entries(value).some(([key, nestedValue]) => {
+    const keyLooksUnsafe =
+      key.includes('$') || key.includes('.') || key.includes('[') || key.includes(']');
+
+    return keyLooksUnsafe || hasDangerousKeys(nestedValue);
+  });
+};
+
+const ensureSafeBody = (req, res) => {
+  if (!req.body || typeof req.body !== 'object' || Array.isArray(req.body)) {
+    res.status(400).json({
+      message: 'Body inválido',
+      code: 'INVALID_BODY'
+    });
+    return false;
+  }
+
+  if (hasDangerousKeys(req.body)) {
+    res.status(400).json({
+      message: 'Body contiene claves no permitidas',
+      code: 'INVALID_BODY_KEYS'
+    });
+    return false;
+  }
+
+  return true;
+};
+
 const validateProduct = (req, res, next) => {
   const { name, price, stock } = req.body;
 
@@ -123,9 +158,61 @@ const validatePaymentIntent = (req, res, next) => {
   return next();
 };
 
+const validateCartItem = (req, res, next) => {
+  const { productId, quantity } = req.body;
+
+  if (!productId || typeof productId !== 'string') {
+    return res.status(400).json({
+      message: 'productId es requerido',
+      code: 'PRODUCT_ID_REQUIRED'
+    });
+  }
+
+  const parsedQuantity = Number.parseInt(quantity, 10);
+  if (!Number.isInteger(parsedQuantity) || parsedQuantity <= 0 || parsedQuantity > 100) {
+    return res.status(400).json({
+      message: 'quantity inválida',
+      code: 'INVALID_QUANTITY'
+    });
+  }
+
+  req.body.productId = productId.trim();
+  req.body.quantity = parsedQuantity;
+  return next();
+};
+
+const validateCartItemQuantity = (req, res, next) => {
+  const { quantity } = req.body;
+  const parsedQuantity = Number.parseInt(quantity, 10);
+
+  if (!Number.isInteger(parsedQuantity) || parsedQuantity <= 0 || parsedQuantity > 100) {
+    return res.status(400).json({
+      message: 'quantity inválida',
+      code: 'INVALID_QUANTITY'
+    });
+  }
+
+  req.body.quantity = parsedQuantity;
+  return next();
+};
+
+const validateProductCreateRequest = (req, res, next) => {
+  if (!ensureSafeBody(req, res)) return undefined;
+  return next();
+};
+
+const validateProductUpdateRequest = (req, res, next) => {
+  if (!ensureSafeBody(req, res)) return undefined;
+  return next();
+};
+
 module.exports = {
   sanitizeString,
   validateProduct,
   validateOrder,
-  validatePaymentIntent
+  validatePaymentIntent,
+  validateCartItem,
+  validateCartItemQuantity,
+  validateProductCreateRequest,
+  validateProductUpdateRequest
 };

@@ -32,7 +32,15 @@ const ProductSchema = new mongoose.Schema({
   },
   originalPrice: {
     type: Number,
-    min: 0
+    min: 0,
+    validate: {
+      validator: function(value) {
+        if (value === undefined || value === null) return true;
+        if (typeof this.price !== 'number') return true;
+        return value >= this.price;
+      },
+      message: 'originalPrice no puede ser menor a price'
+    }
   },
   stock: {
     type: Number,

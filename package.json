@@ -2,8 +2,10 @@
   "name": "backend-yolik",
   "version": "1.0.0",
   "description": "Proyecto web e-commerce de ropa tradicional",
-  "main": "index.js",
+  "main": "src/server.js",
   "scripts": {
+    "start": "node src/server.js",
+    "dev": "nodemon src/server.js",
     "test": "node --test --test-concurrency=1 tests/**/*.test.js",
     "test:orders": "node --test --test-concurrency=1 tests/order-concurrency.test.js",
     "test:payments": "node --test --test-concurrency=1 tests/payment.controller.test.js",

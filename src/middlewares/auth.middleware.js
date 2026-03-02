@@ -55,9 +55,44 @@ const getPermissions = (payload) => {
   return payload.permissions.filter((permission) => typeof permission === 'string');
 };
 
-const normalizeName = (payload) => {
-  const tokenName = payload?.name || payload?.nickname || payload?.given_name || 'Usuario';
-  return String(tokenName).trim().slice(0, 100) || 'Usuario';
+const buildSubjectDigest = (sub, size = 24) =>
+  crypto.createHash('sha256').update(sub).digest('hex').slice(0, size);
+
+const buildFallbackDisplayName = (sub) => `Usuario-${buildSubjectDigest(sub, 6)}`;
+
+const sanitizeDisplayName = (value) => {
+  if (typeof value !== 'string') return null;
+
+  const sanitized = value
+    .replace(/[<>]/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim()
+    .slice(0, 100);
+
+  return sanitized || null;
+};
+
+const looksLikeEmail = (value) => /^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(value);
+
+const normalizeName = (payload, sub) => {
+  const usernameClaim = process.env.AUTH0_USERNAME_CLAIM || 'https://yolik.app/username';
+
+  const candidates = [
+    payload?.[usernameClaim],
+    payload?.preferred_username,
+    payload?.nickname,
+    payload?.name,
+    payload?.given_name
+  ];
+
+  for (const candidate of candidates) {
+    const normalized = sanitizeDisplayName(candidate);
+    if (!normalized) continue;
+    if (looksLikeEmail(normalized)) continue;
+    return normalized;
+  }
+
+  return buildFallbackDisplayName(sub);
 };
 
 const normalizeEmail = (payload) => {
@@ -65,10 +100,7 @@ const normalizeEmail = (payload) => {
   return payload.email.trim().toLowerCase();
 };
 
-const buildFallbackEmail = (sub) => {
-  const digest = crypto.createHash('sha256').update(sub).digest('hex').slice(0, 24);
-  return `auth0-${digest}@noemail.local`;
-};
+const buildFallbackEmail = (sub) => `auth0-${buildSubjectDigest(sub)}@noemail.local`;
 
 const resolveRole = (roles, permissions) => {
   if (roles.includes('admin')) return 'admin';
@@ -79,7 +111,7 @@ const resolveRole = (roles, permissions) => {
 const upsertUserFromAuth0 = async (payload) => {
   const sub = String(payload.sub);
   const email = normalizeEmail(payload);
-  const name = normalizeName(payload);
+  const name = normalizeName(payload, sub);
   const roles = getRoles(payload);
   const permissions = getPermissions(payload);
   const scopedRole = resolveRole(roles, permissions);
@@ -185,9 +217,8 @@ module.exports = (req, res, next) => {
 
       req.user = {
         id: String(user._id),
-        auth0Sub: String(payload.sub),
-        email: user.email,
         name: user.name,
+        username: user.name,
         role: resolveRole(roles, permissions),
         roles,
         permissions,

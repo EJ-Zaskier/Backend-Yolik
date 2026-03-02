@@ -21,6 +21,11 @@ const validateEnvironment = () => {
     throw new Error('AUTH0_API_AUDIENCE inválido');
   }
 
+  const parsedPort = Number.parseInt(process.env.PORT, 10);
+  if (!Number.isInteger(parsedPort) || parsedPort <= 0 || parsedPort > 65535) {
+    throw new Error('PORT inválido');
+  }
+
   if (process.env.NODE_ENV === 'production') {
     if (!process.env.FRONTEND_URL) {
       throw new Error('FRONTEND_URL es obligatorio en producción');
@@ -33,9 +38,16 @@ const startServer = async () => {
     validateEnvironment();
     await connectDB();
 
-    app.listen(process.env.PORT, () =>
-      console.log(`Servidor activo en puerto ${process.env.PORT}`)
-    );
+    const port = Number.parseInt(process.env.PORT, 10);
+    const host = process.env.HOST || '0.0.0.0';
+    const env = process.env.NODE_ENV || 'development';
+
+    app.listen(port, host, () => {
+      const publicHost = host === '0.0.0.0' ? 'localhost' : host;
+      console.log(`Servidor activo en puerto ${port}`);
+      console.log(`Entorno: ${env}`);
+      console.log(`URL local: http://${publicHost}:${port}`);
+    });
   } catch (error) {
     console.error('No se pudo iniciar el servidor:', error.message);
     process.exit(1);

@@ -45,6 +45,10 @@ app.use((req, res, next) => {
   next();
 });
 
+app.get('/healthz', (req, res) => {
+  res.status(200).json({ status: 'ok' });
+});
+
 // LIMITADOR GENERAL (para rutas sin protección específica)
 const generalLimiter = rateLimit({
   windowMs: 15 * 60 * 1000, // 15 minutos
@@ -97,6 +101,9 @@ app.use('/api/auth', require('./routes/auth.routes'));
 
 // Productos: más permisivo
 app.use('/api/products', apiLimiter, require('./routes/product.routes'));
+
+// Carrito: requiere autenticación
+app.use('/api/cart', apiLimiter, require('./routes/cart.routes'));
 
 // Órdenes: más restrictivo (operaciones sensibles)
 app.use('/api/orders', require('./routes/order.routes')); // Usa generalLimiter
