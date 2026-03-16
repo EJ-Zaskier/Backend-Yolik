@@ -96,7 +96,6 @@ async function createPaymentIntent({ items, shippingAddress, subtotal, shippingC
         amount:   amountInCents,
         currency: 'mxn',
         metadata:     { userId, userEmail },
-        cancel_after: 30 * 60,
       });
 
       // 3. Guardar la orden en Mongo — si esto falla, withTransaction hace rollback
