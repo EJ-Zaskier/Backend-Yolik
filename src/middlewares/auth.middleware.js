@@ -24,7 +24,7 @@ const tokenVerifier = issuerBaseURL && audience
       issuerBaseURL,
       audience,
       tokenSigningAlg: 'RS256',
-      strict: true
+      strict: false
     })
   : null;
 
@@ -37,7 +37,7 @@ const getScopes = (payload) => {
 };
 
 const getRoles = (payload) => {
-  const rolesClaimNamespace = process.env.AUTH0_ROLES_CLAIM || 'https://yolik.app/roles';
+  const rolesClaimNamespace = process.env.AUTH0_ROLES_CLAIM || 'https://yolik.com/roles';
 
   if (Array.isArray(payload?.[rolesClaimNamespace])) {
     return payload[rolesClaimNamespace].filter((role) => typeof role === 'string');

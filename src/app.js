@@ -74,7 +74,7 @@ const apiLimiter = rateLimit({
 // LIMITADOR PARA DASHBOARD/ADMIN (si es pesado)
 const dashboardLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
-  max: 30, 
+  max: 30000000, 
   message: {
     error: "Demasiadas peticiones al dashboard. Espera 15 minutos"
   },
