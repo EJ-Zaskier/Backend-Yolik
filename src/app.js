@@ -32,8 +32,16 @@ const corsOptions = {
 };
 
 app.use(cors(corsOptions));
+
+// ⚠️ El webhook de Stripe necesita el body como raw Buffer.
+// DEBE ir antes de express.json() — si json() lo parsea primero, la firma falla.
+if (paymentsEnabled) {
+  app.use('/api/payments/webhook', express.raw({ type: 'application/json' }));
+}
+
 app.use(express.json({ limit: '10kb' }));
 app.use(express.urlencoded({ extended: false, limit: '10kb' }));
+
 app.use((req, res, next) => {
   res.setHeader('X-Content-Type-Options', 'nosniff');
   res.setHeader('X-Frame-Options', 'DENY');
@@ -49,66 +57,48 @@ app.get('/healthz', (req, res) => {
   res.status(200).json({ status: 'ok' });
 });
 
-// LIMITADOR GENERAL (para rutas sin protección específica)
+// LIMITADOR GENERAL
 const generalLimiter = rateLimit({
-  windowMs: 15 * 60 * 1000, // 15 minutos
+  windowMs: 15 * 60 * 1000,
   max: 100,
-  message: {
-    error: "Demasiadas peticiones. Inténtalo de nuevo en 15 minutos"
-  },
+  message: { error: 'Demasiadas peticiones. Inténtalo de nuevo en 15 minutos' },
   standardHeaders: true,
   legacyHeaders: false
 });
 
-// LIMITADOR PARA API (más generoso para usuarios autenticados)
+// LIMITADOR PARA API
 const apiLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
   max: 200,
-  message: {
-    error: "Límite de API alcanzado. Espera 15 minutos"
-  },
+  message: { error: 'Límite de API alcanzado. Espera 15 minutos' },
   standardHeaders: true,
   legacyHeaders: false
 });
 
-// LIMITADOR PARA DASHBOARD/ADMIN (si es pesado)
+// LIMITADOR PARA DASHBOARD/ADMIN
 const dashboardLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
-  max: 30000000, 
-  message: {
-    error: "Demasiadas peticiones al dashboard. Espera 15 minutos"
-  },
+  max: 500,
+  message: { error: 'Demasiadas peticiones al dashboard. Espera 15 minutos' },
   standardHeaders: true,
   legacyHeaders: false
 });
 
+// LIMITADOR PARA PAGOS
 const paymentLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
   max: 60,
-  message: {
-    error: "Límite de peticiones de pago alcanzado. Espera 15 minutos"
-  },
+  message: { error: 'Límite de peticiones de pago alcanzado. Espera 15 minutos' },
   standardHeaders: true,
   legacyHeaders: false
 });
 
-// limitador general por defecto
 app.use(generalLimiter);
 
-// Rutas específicas con sus propios limitadores
-app.use('/api/auth', require('./routes/auth.routes')); 
-
-
-// Productos: más permisivo
-app.use('/api/products', apiLimiter, require('./routes/product.routes'));
-
-// Carrito: requiere autenticación
-app.use('/api/cart', apiLimiter, require('./routes/cart.routes'));
-
-// Órdenes: más restrictivo (operaciones sensibles)
-app.use('/api/orders', require('./routes/order.routes')); // Usa generalLimiter
-
-// Dashboard: limitador específico para operaciones pesadas
+app.use('/api/auth',      require('./routes/auth.routes'));
+app.use('/api/products',  apiLimiter,       require('./routes/product.routes'));
+app.use('/api/cart',      apiLimiter,       require('./routes/cart.routes'));
+app.use('/api/orders',                      require('./routes/order.routes'));
 app.use('/api/dashboard', dashboardLimiter, require('./routes/dashboard.routes'));
 
 if (paymentsEnabled) {

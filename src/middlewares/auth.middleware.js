@@ -96,6 +96,8 @@ const normalizeName = (payload, sub) => {
 };
 
 const normalizeEmail = (payload) => {
+  const fromClaim = payload?.['https://yolik.com/email'];
+  if (fromClaim && typeof fromClaim === 'string') return fromClaim.trim().toLowerCase();
   if (!payload?.email || typeof payload.email !== 'string') return null;
   return payload.email.trim().toLowerCase();
 };
@@ -215,9 +217,13 @@ module.exports = (req, res, next) => {
 
       const { user, roles, permissions, scopes } = await upsertUserFromAuth0(payload);
 
+      // ✅ CORREGIDO: se agrega email a req.user para que payment.controller
+      // lo pueda pasar a createPaymentIntent y se guarde en la orden
       req.user = {
         id: String(user._id),
+        auth0Sub: String(payload.sub),
         name: user.name,
+        email: user.email,        // ← esto es lo que faltaba
         username: user.name,
         role: resolveRole(roles, permissions),
         roles,

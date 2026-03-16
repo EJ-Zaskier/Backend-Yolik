@@ -1,18 +1,14 @@
 const express = require('express');
-const paymentController = require('../controllers/payment.controller');
-const authMiddleware = require('../middlewares/auth.middleware');
-const { requirePermissions } = require('../middlewares/role.middleware');
-const { validatePaymentIntent } = require('../middlewares/validation.middleware');
-
 const router = express.Router();
+const { createIntent, webhook } = require('../controllers/payment.controller');
+const authMiddleware = require('../middlewares/auth.middleware');
 
-router.use(authMiddleware);
-router.get('/config', paymentController.getPaymentSetup);
-router.post(
-  '/intents',
-  requirePermissions(['create:payments']),
-  validatePaymentIntent,
-  paymentController.createPaymentIntent
-);
+// ⚠️ El webhook recibe body como raw Buffer.
+// En app.js esto debe ir ANTES de express.json():
+//   app.use('/api/payments/webhook', express.raw({ type: 'application/json' }));
+router.post('/webhook', webhook);
+
+// Rutas protegidas con JWT de Auth0
+router.post('/create-intent', authMiddleware, createIntent);
 
 module.exports = router;

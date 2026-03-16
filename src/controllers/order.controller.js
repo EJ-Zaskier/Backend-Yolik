@@ -261,3 +261,35 @@ exports.getOrderById = async (req, res, next) => {
     return next(error);
   }
 };
+
+// ✅ NUEVO: actualiza el status de una orden (solo admin)
+exports.updateOrderStatus = async (req, res, next) => {
+  try {
+    const { status } = req.body;
+    const validStatuses = ['Procesando', 'En camino', 'Entregado', 'Cancelado'];
+
+    if (!status || !validStatuses.includes(status)) {
+      return res.status(400).json({
+        message: `Estado inválido. Valores permitidos: ${validStatuses.join(', ')}`,
+        code: 'INVALID_STATUS'
+      });
+    }
+
+    const order = await Order.findByIdAndUpdate(
+      req.params.id,
+      { status },
+      { new: true, runValidators: true }
+    ).lean();
+
+    if (!order) {
+      return res.status(404).json({
+        message: 'Orden no encontrada',
+        code: 'ORDER_NOT_FOUND'
+      });
+    }
+
+    return res.json({ message: 'Estado actualizado', order });
+  } catch (error) {
+    return next(error);
+  }
+};

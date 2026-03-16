@@ -84,10 +84,11 @@ exports.getSummary = async (req, res, next) => {
           active: true,
           stock: { $lte: lowStockThreshold }
         }),
+        // ✅ CORREGIDO: se agrega userEmail al select
         Order.find(baseMatch)
           .sort({ createdAt: -1 })
           .limit(5)
-          .select('orderNumber total status paymentStatus createdAt userId')
+          .select('orderNumber total status paymentStatus createdAt userId userEmail')
           .lean()
       ]);
 
