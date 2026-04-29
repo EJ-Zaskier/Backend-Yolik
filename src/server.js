@@ -31,6 +31,10 @@ const validateEnvironment = () => {
       throw new Error('FRONTEND_URL es obligatorio en producción');
     }
   }
+
+  if (process.env.ENABLE_PAYMENTS === 'true' && !process.env.STRIPE_WEBHOOK_SECRET) {
+    throw new Error('STRIPE_WEBHOOK_SECRET es requerido cuando ENABLE_PAYMENTS=true');
+  }
 };
 
 const startServer = async () => {
