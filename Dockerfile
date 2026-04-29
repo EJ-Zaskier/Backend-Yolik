@@ -27,6 +27,6 @@ EXPOSE 3000
 
 # /healthz devuelve {"status":"ok"} — sin autenticación
 HEALTHCHECK --interval=30s --timeout=10s --start-period=30s --retries=3 \
-  CMD wget -qO- http://localhost:3000/healthz || exit 1
+  CMD node -e "require('http').get('http://localhost:3000/healthz', (r) => { process.exit(r.statusCode === 200 ? 0 : 1) }).on('error', () => process.exit(1))"
 
 CMD ["node", "src/server.js"]
